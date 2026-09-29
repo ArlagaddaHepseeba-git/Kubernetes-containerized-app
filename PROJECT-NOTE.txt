@@ -1,0 +1,19 @@
+﻿This archive is the Containerized Application Deployment with Kubernetes
+project, extracted from the three-tier repository so the Kubernetes work
+can be reviewed on its own.
+
+Full repository: https://github.com/ArlagaddaHepseeba-git/3-tire-webapplication
+
+What to look at first:
+
+  deploy/deploy-k8s.sh          one-command build, load, lint, deploy
+  k8s/01-config.yaml            ConfigMap, Secret, database schema
+  k8s/02-mysql.yaml             StatefulSet + ClusterIP Service
+  k8s/03-backend.yaml           Deployment, probes, Service, HPA
+  k8s/04-frontend.yaml          Deployment + NodePort Service
+  k8s/05-ingress-aws.yaml       ALB Ingress, for EKS only
+  helm/threetier-app/           Chart packaging the same app
+  docs/KUBERNETES_INTERVIEW_PREP.md   questions and answers
+
+README.md is the full project documentation, including the "design
+decisions worth explaining" section.

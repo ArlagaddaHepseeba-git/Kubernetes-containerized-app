@@ -1,0 +1,23 @@
+# global
+scrape_interval: 15s
+evaluation_interval: 15s
+
+scrape_configs:
+  # Spring Boot Actuator exposes Prometheus metrics here once
+  # management.endpoints.web.exposure.include includes "prometheus"
+  - job_name: 'springboot'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['backend:8080']
+        labels:
+          application: 'threetier-backend'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node-level metrics via node_exporter
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']

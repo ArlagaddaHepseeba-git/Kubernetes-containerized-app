@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "threetier-app.fullname" . }}
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "threetier-app.selectorLabels" . | nindent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "threetier-app.fullname" . }}-config
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+data:
+  {{- if .Values.database.enabled }}
+  # Assembled here rather than in values.yaml so the host always matches
+  # the Service name the StatefulSet creates for the current release.
+  DB_URL: "jdbc:mysql://{{ .Release.Name }}-mysql:3306/{{ .Values.database.database }}"
+  {{- end }}
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "threetier-app.fullname" . }}-secrets
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- range $key, $value := .Values.secrets }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+---
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "threetier-app.serviceAccountName" . }}
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- if .Values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "threetier-app.fullname" . }}
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "threetier-app.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "threetier-app.fullname" . }}
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "threetier-app.fullname" $ }}
+                port:
+                  number: {{ $.Values.service.port }}
+          {{- end }}
+    {{- end }}
+{{- end }}

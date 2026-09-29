@@ -1,0 +1,141 @@
+{{/*
+MySQL runs as a StatefulSet, not a Deployment, because it needs a
+PersistentVolumeClaim that survives pod restarts. A Deployment with an
+emptyDir would lose all data every time the pod was rescheduled.
+*/}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-mysql
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  serviceName: {{ .Release.Name }}-mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: database
+    spec:
+      containers:
+        - name: mysql
+          image: {{ .Values.database.image }}
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "threetier-app.fullname" . }}-secrets
+                  key: DB_PASSWORD
+            - name: MYSQL_DATABASE
+              value: {{ .Values.database.database }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            {{- if .Values.database.seedSchema }}
+            # init.sql runs once, on first start of an empty volume, and
+            # creates the items table plus seed data. Without it the
+            # backend starts but fails on its first query.
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+            {{- end }}
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost"]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost", "--silent"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+      {{- if .Values.database.seedSchema }}
+      volumes:
+        - name: initdb
+          configMap:
+            name: {{ .Release.Name }}-mysql-init
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.database.storage }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-mysql
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  # A normal ClusterIP rather than a headless service. A headless service
+  # (clusterIP: None) resolves straight to the pod IP, so the connection
+  # breaks whenever the pod is recreated. A ClusterIP is a stable virtual
+  # IP that kube-proxy load-balances across pods.
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: database
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+      protocol: TCP
+{{- if .Values.database.seedSchema }}
+---
+# Schema and seed data, applied once on first start of an empty volume.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-mysql-init
+  labels:
+    {{- include "threetier-app.labels" . | nindent 4 }}
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS {{ .Values.database.database }};
+    USE {{ .Values.database.database }};
+
+    CREATE TABLE IF NOT EXISTS items (
+        id         BIGINT       NOT NULL AUTO_INCREMENT,
+        name       VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    CREATE TABLE IF NOT EXISTS users (
+        id            BIGINT       NOT NULL AUTO_INCREMENT,
+        username      VARCHAR(100) NOT NULL UNIQUE,
+        email         VARCHAR(255) NOT NULL UNIQUE,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    INSERT INTO items (name) VALUES
+        ('Learn Docker'),
+        ('Setup Kubernetes'),
+        ('Configure CI/CD'),
+        ('Deploy to AWS'),
+        ('Monitor with Prometheus'),
+        ('Practice Terraform'),
+        ('Write a GitHub Action');
+{{- end }}

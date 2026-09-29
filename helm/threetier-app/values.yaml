@@ -1,0 +1,98 @@
+# Default values for threetier-app.
+# Override any of these with:  helm install myapp ./threetier-app -f my-values.yaml
+
+replicaCount: 2
+
+image:
+  repository: threetier-backend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: alb
+  annotations: {}
+  hosts:
+    - host: threetier.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+# Startup probe. Spring Boot needs 30-60s to boot, so the liveness probe
+# must not run until this succeeds, or the pod restarts forever.
+startupProbe:
+  failureThreshold: 30
+  periodSeconds: 10
+
+# Liveness: restart the container if the JVM stops responding
+livenessProbe:
+  path: /actuator/health/liveness
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+# Readiness: remove the pod from the Service if it cannot serve traffic
+readinessProbe:
+  path: /actuator/health/readiness
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Database - a StatefulSet is required because MySQL needs stable storage
+# across restarts, which an emptyDir in a Deployment would not provide.
+database:
+  enabled: true
+  image: mysql:8.0
+  storage: 5Gi
+  database: devops_practice_db
+  # Mount init.sql so the items table and seed data are created on first
+  # start of an empty volume. Set to false if the database already exists,
+  # otherwise the seed rows are inserted again on every fresh volume.
+  seedSchema: true
+
+# Application config stored in a ConfigMap (non-sensitive values).
+# DB_URL is assembled by the chart so it always points at the Service the
+# StatefulSet creates, whatever the release is named.
+config:
+  PORT: "8080"
+  # Matches application-container.properties, which disables TLS and
+  # enables the liveness/readiness health groups used by the probes.
+  SPRING_PROFILES_ACTIVE: "container"
+
+# Placeholder credentials. In a real environment these are synced from
+# AWS Secrets Manager by the External Secrets Operator, so no password
+# is ever stored in git.
+secrets:
+  DB_USERNAME: "root"
+  DB_PASSWORD: "local-dev-password"
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

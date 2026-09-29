@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+    tier: database
+spec:
+  serviceName: mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: DB_PASSWORD
+            - name: MYSQL_DATABASE
+              value: devops_practice_db
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+            # Runs init.sql on first start of an empty volume, which
+            # creates the items table and seed data.
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+          livenessProbe:
+            exec:
+              command: ["mysqladmin", "ping", "-h", "localhost"]
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          readinessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+                - --silent
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+      volumes:
+        - name: initdb
+          configMap:
+            name: mysql-init
+  # A PersistentVolumeClaim gives the database stable storage. Without
+  # it, every pod restart would lose all data - which is the main reason
+  # MySQL runs as a StatefulSet rather than a Deployment here.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: mysql
+spec:
+  # A normal ClusterIP, not a headless service. A headless service
+  # (clusterIP: None) resolves to the pod IP directly, so the connection
+  # breaks whenever the pod is recreated. A ClusterIP is a stable virtual
+  # IP that the kube-proxy load-balances across pods.
+  type: ClusterIP
+  selector:
+    app: mysql
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: 3306
+      protocol: TCP

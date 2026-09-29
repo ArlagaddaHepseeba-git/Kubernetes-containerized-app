@@ -1,0 +1,77 @@
+version: "3.9"
+
+# Local three-tier stack: React (nginx) -> Spring Boot (Tomcat) -> MySQL
+# Mirrors the production AWS topology so what you test locally matches
+# what you deploy.
+
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: threetier-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: devops_practice_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - threetier
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: threetier-backend:latest
+    container_name: threetier-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      # Credentials come from environment variables, never from source code
+      DB_URL: jdbc:mysql://mysql:3306/devops_practice_db
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      PORT: "8080"
+      SPRING_PROFILES_ACTIVE: container
+    ports:
+      - "8080:8080"
+    networks:
+      - threetier
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Build-time API URL. In production this points at the ALB domain.
+        REACT_APP_API_URL: http://localhost:8080/api
+    image: threetier-frontend:latest
+    container_name: threetier-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        # Wait until the backend reports healthy, otherwise the first
+        # page load hits a connection-refused error
+        condition: service_healthy
+    ports:
+      - "3000:80"
+    networks:
+      - threetier
+
+volumes:
+  mysql-data:
+    driver: local
+
+networks:
+  threetier:
+    driver: bridge

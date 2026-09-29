@@ -1,0 +1,16 @@
+# Patterns ignored when packaging the chart.
+# Large directories, VCS and editor folders.
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.DS_Store
+
+# Helm internals
+charts/
+*.tgz

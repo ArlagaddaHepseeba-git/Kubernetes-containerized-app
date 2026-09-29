@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: frontend
+          image: threetier-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app: frontend
+spec:
+  # NodePort so the app is reachable on the node IP without an Ingress
+  # controller. Load balancer / ALB annotations belong in a cloud
+  # environment, where the controller reads them; on a local cluster they
+  # are ignored and only produce a confusing warning.
+  type: NodePort
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+---
+# Kept separate from the Service above on purpose: the NodePort is what
+# works on a local cluster, while this Ingress is what you would apply on
+# EKS with the AWS Load Balancer Controller installed. Apply this file
+# only in that environment.
+#
+# kubectl apply -f k8s/05-ingress-aws.yaml
+#
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: threetier
+#   annotations:
+#     alb.ingress.kubernetes.io/scheme: internet-facing
+#     alb.ingress.kubernetes.io/target-type: ip
+#     alb.ingress.kubernetes.io/healthcheck-path: /health
+#     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+# spec:
+#   ingressClassName: alb
+#   rules:
+#     - http:
+#         paths:
+#           - path: /api
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: backend
+#                 port:
+#                   number: 8080
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: frontend
+#                 port:
+#                   number: 80

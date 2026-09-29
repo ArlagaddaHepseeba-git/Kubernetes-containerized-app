@@ -1,0 +1,12 @@
+apiVersion: v2
+name: threetier-app
+description: Three-tier React + Spring Boot + MySQL application on Kubernetes
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - devops
+  - three-tier
+  - react
+  - spring-boot
+  - mysql

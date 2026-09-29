@@ -1,0 +1,83 @@
+# ---------- Build artifacts ----------
+target/
+build/
+dist/
+*.class
+*.jar
+*.war
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---------- Secrets (critical) ----------
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.csv
+*.env
+.env
+.env.*
+credentials
+credentials.*
+*secret*
+*token*
+id_rsa
+id_rsa.pub
+*.ppk
+
+# ---------- Terraform ----------
+# Provider binaries are large and platform-specific - never commit
+.terraform/
+
+# The lock file SHOULD be committed for environment configs: it pins exact
+# provider versions so every teammate and the CI runner get the same build.
+# It is ignored inside reusable modules, where one shared lock would be wrong.
+terraform/**/*.lock.hcl
+
+# State files contain real resource data and can contain secrets - never commit
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Variable files hold account IDs, regions, and sometimes credentials.
+# example.tfvars is committed as a template.
+*.tfvars
+*.tfvars.*
+!example.tfvars
+!*.auto.tfvars.example
+
+crash.log
+crash.*.log
+*.tfplan
+*.tfplan.*
+terraform-local-backup/
+override.tf
+override_*.tf
+*_override.tf
+*_override.tf
+
+# ---------- Node ----------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ---------- IDE ----------
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+nbproject/
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+
+# ---------- Logs ----------
+*.log
+logs/
